@@ -42,7 +42,7 @@ def main():
         raws.append(list(raw)+EventToDF(Eventdatatemp))
 
     res = pd.DataFrame(data=raws, columns=header)
-    res = res.drop(columns=["num of events type 0 for size 1","num of events type 0 for size 2"])
+    res = res.drop(columns=["num of events type 0 for size 1","num of events type 0 for size 2", "id_odsp"])
     res.to_csv("final data.csv")
 
 
