@@ -1,13 +1,7 @@
 import pandas as pd
-import sklearn
 import math
 
 NUM_OF_FEATURE = 16
-
-#transport dic to dataframe
-def ListToDF(dic):
-    list_header = ["num of events type "+ i +" for size 1" for i in range(NUM_OF_FEATURE)]
-    list_header2 = ["num of events type " + i + " for size 2" for i in range(NUM_OF_FEATURE)]
 
 #prepare Data
 def EventToDF(Data:pd.DataFrame):
