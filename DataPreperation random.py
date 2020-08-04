@@ -9,7 +9,6 @@ from mlxtend.feature_selection import SequentialFeatureSelector
 from sklearn.svm import SVC
 from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import mutual_info_classif
-from random import sample
 from sklearn.neighbors import (NeighborhoodComponentsAnalysis,KNeighborsClassifier)
 
 def Getwinner(res):
@@ -32,13 +31,11 @@ def AddColumns(data):
     #data.to_csv("temp.csv")
 
 def transform_to_numeric(data):
-    # transform the rest (categorical) values
-    ObjFeat = data.keys()[data.dtypes.map(lambda x: x == 'object')]
-    for f in ObjFeat:
-        data[f] = data[f].astype("category")
-        data[f] = data[f].cat.rename_categories(range(data[f].nunique())).astype(float)
-    # fix NaN conversion
-    data.fillna(np.nan)
+    header = list(data.head(0))
+    header.remove("random")
+    header.remove("winner")
+    data = data.drop(columns=header)
+
     return data
 
 #split the data
@@ -52,7 +49,7 @@ def split_data(data):
 def remove_outlier(data_X, data_Y):
     # combine X and Y to consider both when detecting outliers
     data = pd.concat([data_X, data_Y], axis=1)
-    clf = IsolationForest(random_state=0, contamination=0.01)
+    clf = IsolationForest(random_state=0, contamination=0.08)
     outlier_prediction = clf.fit_predict(data)
     index_to_drop_list = []
     for i in range(len(outlier_prediction)):
@@ -69,38 +66,14 @@ def transform_season_to_one_hot(data):
 def min_max_scale(column, min, max):
     if max - min == 0:
         return column
-    return column.apply(lambda x: 2 * (x - min) / (max - min) - 1)
-
-def z_score_scale(column, mean, std):
-    if mean == 0:
-        return column
-    return column.apply(lambda x: (x - mean) / std)
+    return column.apply(lambda x: x  / (max - min) )
 
 def scale_data(train, valid, test):
-    features_for_normalization = list(train.head(0))
-    feature_for_min_max = ["date", "ht", "at"]
-    feature_for_z_score = list(set(features_for_normalization) - set(feature_for_min_max))
-    '''
-    # features_for_normalization = [item for item in headers.head(0)]
-    features_for_normalization_a = features_for_normalization[0:len(features_for_normalization) // 4]
-    features_for_normalization_b = features_for_normalization[3*len(features_for_normalization) // 4: len(features_for_normalization)]
-    plt.figure()
-    for i in range(len(features_for_normalization_b)):
-        plt.subplot(len(features_for_normalization_b)/3 +1, 3, i + 1)
-        plt.hist(train[features_for_normalization_b[i]], density=False, bins=100)
-        plt.ylabel('Count')
-        plt.xlabel(features_for_normalization_b[i])
-    plt.show()
-    '''
-    for f in feature_for_min_max:
+    min_max_features = list(train.head(0))
+    print(min_max_features)
+    for f in min_max_features:
         max, min = train[f].max(), train[f].min()
         train[f], valid[f], test[f] = min_max_scale(train[f],min, max), min_max_scale(valid[f],min, max), min_max_scale(test[f],min, max)
-
-    for f in feature_for_z_score:
-        mean, std = train[f].mean(), train[f].std()
-        train[f], valid[f], test[f] = z_score_scale(train[f], mean, std), z_score_scale(valid[f], mean,
-                                                                                        std), z_score_scale(test[f],
-                                                                                                            mean, std)
     return train, valid, test
 
 def plot_feature_with_label(data, label):
@@ -149,31 +122,20 @@ def filter_with_sfs(train_X, valid_X, test_X, train_Y, i):
 
 def feature_selection(train_X, valid_X, test_X, train_Y, i):
     # remove Linear dependencies feature
+    #train_X, valid_X, test_X = remove_linear_dependencies(train_X), remove_linear_dependencies(valid_X),\
+    #    remove_linear_dependencies(test_X)
     # using  filter method
     train_X, valid_X, test_X = filter_with_relief(train_X, valid_X, test_X, train_Y)
     # using  wrapper method
     train_X, valid_X, test_X = filter_with_sfs(train_X, valid_X, test_X, train_Y, i)
     return train_X, valid_X, test_X
 
-def plot_feature(data, feature):
-    plt.figure()
-    plt.hist(data[feature], density=False, bins=100)
-    plt.ylabel('Count')
-    plt.xlabel(feature)
-    plt.show(block=True)
-
-def check_corr(data):
-    value = 0.95
-    curr_cor = data.corr(method='pearson')
-    curr_cor = curr_cor.applymap(lambda x: x if abs(x) > value else 0)
-    curr_cor.to_csv("final feature.csv")
-
 def main():
     raw_data = pd.read_csv("final data.csv", header=0)
     # Add random and winner (as label)
     AddColumns(raw_data)
     numeric_data = transform_to_numeric(raw_data)
-    numeric_data = transform_season_to_one_hot(numeric_data)
+    #numeric_data = transform_season_to_one_hot(numeric_data)
     #numeric_data.to_csv("temp.csv")
     train, valid, test = split_data(numeric_data)
     train_Y, valid_Y, test_Y = train.winner, valid.winner, test.winner
@@ -184,9 +146,9 @@ def main():
     #check_performence(train_X, train_Y, valid_X, valid_Y)
     ##############
     # check perfomans without the winning columns
-    train_X, valid_X, test_X = train.drop(columns=['winner', 'fthg', 'ftag', 'The number of goals the home group leads']
-                                          ), valid.drop(columns=['winner', 'fthg', 'ftag', 'The number of goals the home group leads']
-                                                        ), test.drop(columns=['winner', 'fthg', 'ftag', 'The number of goals the home group leads'])
+    train_X, valid_X, test_X = train.drop(columns=['winner']
+                                          ), valid.drop(columns=['winner']
+                                                        ), test.drop(columns=['winner'])
     print("performence before:")
     check_performence(train_X, train_Y, valid_X, valid_Y)
     train_X, train_Y = remove_outlier(train_X, train_Y)
@@ -198,6 +160,9 @@ def main():
     check_performence(train_X, train_Y, valid_X, valid_Y)
 
 
+    t_train_X, t_valid_X, t_test_X = feature_selection(train_X, valid_X, test_X, train_Y, 30)
+    print("performence after " +str(i)+ " feature selection:")
+    check_performence(t_train_X, train_Y, t_valid_X, valid_Y)
 
     final_train = pd.concat([train_Y, train_X], axis=1)
     final_train.to_csv("processedTrainData.csv", index=False)
