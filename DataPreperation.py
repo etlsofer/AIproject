@@ -1,25 +1,47 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.impute import KNNImputer
-from sklearn.ensemble import IsolationForest, RandomForestClassifier
+from sklearn.ensemble import IsolationForest, RandomForestClassifier, VotingClassifier
 from sklearn.metrics import accuracy_score
 from ReliefF import ReliefF
 from mlxtend.feature_selection import SequentialFeatureSelector
 from sklearn.svm import SVC
-from sklearn.feature_selection import SelectKBest
-from sklearn.feature_selection import mutual_info_classif
-from random import sample
 from sklearn.neighbors import (NeighborhoodComponentsAnalysis,KNeighborsClassifier)
+from sklearn.model_selection import cross_val_score, cross_val_predict
+from sklearn.linear_model import SGDClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn import naive_bayes
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import GradientBoostingClassifier
 
 def Getwinner(res):
     winner = []
     for val in res:
         if val > 0:
             winner.append(1)
+        elif val == 0:
+            winner.append(0)
         else:
             winner.append(-1)
     return pd.DataFrame(data=winner)
+
+def BalansData(data):
+    header = list(data.head(0))
+    t_data = []
+    counter = 0
+    for raw in data.values:
+        if raw[42] == -1:
+            if counter > -814:
+                t_data.append(raw)
+            else:
+                counter +=1
+                continue
+        else:
+            t_data.append(raw)
+    return pd.DataFrame(data=t_data, columns=header)
+
+
 
 def AddColumns(data):
     # Add random
@@ -114,9 +136,20 @@ def plot_feature_with_label(data, label):
         plt.show(block=True)
 
 def check_performence(train_X, train_Y, valid_X, valid_Y):
-    clf = KNeighborsClassifier(n_neighbors=5)
+    c1 = SVC(C=0.01,kernel="linear")
+    c2 = RandomForestClassifier(n_estimators=50, max_depth=10)
+    c3 = KNeighborsClassifier(n_neighbors=150)
+    c4 = SGDClassifier(loss="huber", penalty="l1")
+    c5 = DecisionTreeClassifier(criterion="gini", min_samples_split=250)
+    c6 = LinearDiscriminantAnalysis(solver="lsqr")
+    c7 = naive_bayes.BernoulliNB()
+    c8 = MLPClassifier(hidden_layer_sizes=(5,3))
+    c9 = GradientBoostingClassifier(random_state=0, n_estimators=100, learning_rate=0.1)
+    clf = VotingClassifier(estimators=[('a', c1), ('f', c6), ('h', c8) ,
+                                       ('i', c9)])
     clf.fit(train_X, train_Y)
     res = clf.predict(valid_X)
+    #cross_val_score_avg = cross_val_score(estimator=clf, X=train_X, y=train_Y, cv=10, scoring='accuracy').mean()
     print("accuracy on validation set: {}".format(accuracy_score(valid_Y, res)))
 
 def filter_with_relief(train_x, valid_x, test_x, train_y):
@@ -148,11 +181,40 @@ def filter_with_sfs(train_X, valid_X, test_X, train_Y, i):
            test_X.drop(features_to_drop, axis=1)
 
 def feature_selection(train_X, valid_X, test_X, train_Y, i):
-    # remove Linear dependencies feature
-    # using  filter method
-    train_X, valid_X, test_X = filter_with_relief(train_X, valid_X, test_X, train_Y)
-    # using  wrapper method
-    train_X, valid_X, test_X = filter_with_sfs(train_X, valid_X, test_X, train_Y, i)
+    c1 = SVC(C=0.01, kernel="linear")
+    c2 = RandomForestClassifier(n_estimators=50, max_depth=10)
+    c3 = KNeighborsClassifier(n_neighbors=150)
+    c4 = SGDClassifier(loss="huber", penalty="l1")
+    c5 = DecisionTreeClassifier(criterion="gini", min_samples_split=250)
+    c6 = LinearDiscriminantAnalysis(solver="lsqr")
+    c7 = naive_bayes.BernoulliNB()
+    c8 = MLPClassifier(hidden_layer_sizes=(5, 3))
+    c9 = GradientBoostingClassifier(random_state=0, n_estimators=100, learning_rate=0.1)
+    c10 = VotingClassifier(estimators=[('a', c1), ('b', c2)  ,('c', c3),('d', c4), ('e', c5)  ,('f', c6),('g', c7), ('h', c8) ,
+                                       ('i', c9)])
+    features = {item for item in train_X.head(0)}
+    fs = SequentialFeatureSelector(c10,
+                                                 k_features=i,
+                                                 forward=False,
+                                                 verbose=0,
+                                                 scoring='accuracy',
+                                                 cv=4)
+    fs.fit(train_X, train_Y)
+
+    selected_features = set(fs.k_feature_names_)
+    print(fs.subsets_)
+    features_to_drop = list(features - selected_features)
+
+    return train_X.drop(features_to_drop, axis=1), valid_X.drop(features_to_drop, axis=1), \
+           test_X.drop(features_to_drop, axis=1)
+
+def feature_selection_with_corr(train_X, valid_X, test_X):
+    feature_to_drop = ["num of events type 9 for size 1","num of events type 9 for size 2",
+                       "num of events type 1 for size 1","num of events type 1 for size 2",
+                       "num of events type 3 for size 2","num of events type 3 for size 1"]
+
+    train_X, valid_X, test_X = train_X.drop(feature_to_drop, axis=1), valid_X.drop(feature_to_drop, axis=1),\
+                               test_X.drop(feature_to_drop, axis=1)
     return train_X, valid_X, test_X
 
 def plot_feature(data, feature):
@@ -168,10 +230,45 @@ def check_corr(data):
     curr_cor = curr_cor.applymap(lambda x: x if abs(x) > value else 0)
     curr_cor.to_csv("final feature.csv")
 
+def feature_selection_final(train_X, valid_X, test_X):
+    features = list(train_X.head(0))
+    feature_to_keap = ["odd_h",
+            "num of events type 2 for size 1",
+            "num of events type 14 for size 1",
+            "num of events type 14 for size 2",
+            "num of events type 7 for size 1",
+            "num of events type 15 for size 1",
+            "num of events type 8 for size 1",
+            "num of events type 2 for size 2",
+            "num of events type 7 for size 2",
+            "num of events type 15 for size 2",
+            "num of events type 10 for size 2",
+            "num of events type 4 for size 1",
+            "num of events type 11 for size 1",
+            "num of events type 13 for size 1",
+            "date",
+            "num of events type 6 for size 2",
+            "num of events type 12 for size 1",
+            "odd_d",
+            "num of events type 12 for size 2",
+            "at",
+            "ht"]
+    feature_to_drop = ["league",
+                       "country",
+                       "num of events type 13 for size 1",
+                       "season_2014",
+                       "num of events type 5 for size 2",
+                       "at",
+                       "num of events type 13 for size 2",
+                       "random",
+                       "ht"]
+    return train_X.drop(columns=feature_to_drop), valid_X.drop(columns=feature_to_drop), test_X.drop(columns=feature_to_drop)
+
 def main():
     raw_data = pd.read_csv("final data.csv", header=0)
     # Add random and winner (as label)
     AddColumns(raw_data)
+    #raw_data = BalansData(raw_data)
     numeric_data = transform_to_numeric(raw_data)
     numeric_data = transform_season_to_one_hot(numeric_data)
     #numeric_data.to_csv("temp.csv")
@@ -187,23 +284,36 @@ def main():
     train_X, valid_X, test_X = train.drop(columns=['winner', 'fthg', 'ftag', 'The number of goals the home group leads']
                                           ), valid.drop(columns=['winner', 'fthg', 'ftag', 'The number of goals the home group leads']
                                                         ), test.drop(columns=['winner', 'fthg', 'ftag', 'The number of goals the home group leads'])
-    print("performence before:")
-    check_performence(train_X, train_Y, valid_X, valid_Y)
+    #print("performence before:")
+    #check_performence(train_X, train_Y, valid_X, valid_Y)
     train_X, train_Y = remove_outlier(train_X, train_Y)
-    print("performence after outlier dection:")
-    check_performence(train_X, train_Y, valid_X, valid_Y)
+    #print("performence after outlier dection:")
+    #check_performence(train_X, train_Y, valid_X, valid_Y)
 
     train_X, valid_X, test_X = scale_data(train_X, valid_X, test_X)
-    print("performence after scaling:")
-    check_performence(train_X, train_Y, valid_X, valid_Y)
+
+    #print("performence after scaling with n = "+ str(n)+" and d = "+str(d))
+    train_X, valid_X, test_X = feature_selection_with_corr(train_X, valid_X, test_X)
+
+    #print("f = "+f+" k = "+str(k))
+    #check_performence(train_X, train_Y, valid_X, valid_Y)
+
+    t_train_X, t_valid_X, t_test_X = feature_selection_final(train_X, valid_X, test_X)
+    print("performence after " + str(2) + " feature selection:")
+    check_performence(t_train_X, train_Y, t_test_X, test_Y)
+
+    '''
+    size = train.shape[1]
+    for i in range(size-4,5,-1):
+        t_train_X, t_valid_X, t_test_X = feature_selection(train_X, valid_X, test_X, train_Y, i)
+        print("performence after " + str(i) + " feature selection:")
+        check_performence(t_train_X, train_Y, t_valid_X, valid_Y)
+    '''
+    #final_train = pd.concat([train_Y, train_X], axis=1)
+    #final_train.to_csv("processedTrainData.csv", index=False)
 
 
-
-    final_train = pd.concat([train_Y, train_X], axis=1)
-    final_train.to_csv("processedTrainData.csv", index=False)
-
-
-    pd.DataFrame(data=train_X).to_csv("temp.csv")
+    #pd.DataFrame(data=train_X).to_csv("temp.csv")
 
 
 
